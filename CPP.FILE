@@ -1,0 +1,215 @@
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <unordered_set>
+#include <cmath>
+#include <algorithm>
+#include <iomanip>
+#include <sstream>
+
+using namespace std;
+
+// Structure to represent a puzzle state
+struct PuzzleState {
+    vector<vector<int>> board; // 3x3 board
+    int g; // Cost from start to current state
+    int h; // Heuristic cost to goal
+    pair<int, int> blank_pos; // Position of the blank tile (0)
+    vector<string> path; // Sequence of moves to reach this state
+
+    // Calculate total cost (f = g + h)
+    int cost() const { return g + h; }
+
+    // Comparison for priority queue
+    bool operator>(const PuzzleState& other) const {
+        return cost() > other.cost();
+    }
+};
+
+// Function to calculate Manhattan Distance heuristic
+int manhattanDistance(const vector<vector<int>>& board) {
+    int distance = 0;
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (board[i][j] == 0) continue; // Skip blank tile
+            int target_x = (board[i][j] - 1) / 3; // Expected row
+            int target_y = (board[i][j] - 1) % 3; // Expected column
+            distance += abs(i - target_x) + abs(j - target_y); // Manhattan Distance
+        }
+    }
+    return distance;
+}
+
+// Function to convert board to string for hashing
+string boardToString(const vector<vector<int>>& board) {
+    string s;
+    for (const auto& row : board) {
+        for (int num : row) {
+            s += to_string(num);
+        }
+    }
+    return s;
+}
+
+// Function to generate neighboring states
+vector<PuzzleState> getNeighbors(const PuzzleState& state) {
+    vector<PuzzleState> neighbors;
+    int dx[] = {-1, 1, 0, 0}; // Directions: Up, Down, Left, Right
+    int dy[] = {0, 0, -1, 1};
+    string directions[] = {"Up", "Down", "Left", "Right"};
+
+    for (int i = 0; i < 4; i++) {
+        int new_x = state.blank_pos.first + dx[i];
+        int new_y = state.blank_pos.second + dy[i];
+
+        // Check if the new position is within bounds
+        if (new_x >= 0 && new_x < 3 && new_y >= 0 && new_y < 3) {
+            PuzzleState neighbor = state;
+            // Swap blank tile with adjacent tile
+            swap(neighbor.board[state.blank_pos.first][state.blank_pos.second],
+                 neighbor.board[new_x][new_y]);
+            neighbor.blank_pos = {new_x, new_y};
+            neighbor.g++; // Increment cost
+            neighbor.h = manhattanDistance(neighbor.board); // Update heuristic
+            neighbor.path.push_back(directions[i]); // Add move to path
+            neighbors.push_back(neighbor);
+        }
+    }
+
+    return neighbors;
+}
+
+// Function to solve the puzzle using A* search
+vector<string> solvePuzzle(const vector<vector<int>>& start, const vector<vector<int>>& goal) {
+    priority_queue<PuzzleState, vector<PuzzleState>, greater<PuzzleState>> pq;
+    unordered_set<string> visited;
+
+    PuzzleState initial;
+    initial.board = start;
+    initial.g = 0;
+    initial.h = manhattanDistance(start);
+    
+    // Find initial blank position
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (start[i][j] == 0) {
+                initial.blank_pos = {i, j};
+                break;
+            }
+        }
+    }
+
+    pq.push(initial);
+
+    while (!pq.empty()) {
+        PuzzleState current = pq.top();
+        pq.pop();
+
+        // Check if current state is the goal
+        if (current.board == goal) {
+            return current.path;
+        }
+
+        string boardStr = boardToString(current.board);
+        if (visited.find(boardStr) != visited.end()) {
+            continue; // Skip already visited states
+        }
+        visited.insert(boardStr);
+
+        // Explore neighbors
+        for (PuzzleState neighbor : getNeighbors(current)) {
+            string neighborStr = boardToString(neighbor.board);
+            if (visited.find(neighborStr) == visited.end()) {
+                pq.push(neighbor);
+            }
+        }
+    }
+
+    return {}; // No solution found
+}
+
+// Function to print the board
+void printBoard(const vector<vector<int>>& board) {
+    cout << "+---+---+---+\n";
+    for (const auto& row : board) {
+        cout << "|";
+        for (int num : row) {
+            if (num == 0) cout << "   |";
+            else cout << setw(2) << num << " |";
+        }
+        cout << "\n+---+---+---+\n";
+    }
+}
+
+// Function to validate the board configuration
+bool validateBoard(const vector<vector<int>>& board) {
+    vector<bool> present(9, false);
+    bool has_zero = false;
+    
+    for (const auto& row : board) {
+        for (int num : row) {
+            if (num < 0 || num > 8) return false; // Invalid number
+            if (num == 0) has_zero = true; // Check for blank tile
+            if (present[num]) return false; // Duplicate number
+            present[num] = true;
+        }
+    }
+    return has_zero; // Must have exactly one blank tile
+}
+
+// Function to get the initial board from user input
+vector<vector<int>> getInputBoard() {
+    vector<vector<int>> board(3, vector<int>(3));
+    
+    cout << "Enter the initial board (3x3), use 0 for the blank space:\n";
+    for (int i = 0; i < 3; i++) {
+        string line;
+        cout << "Row " << (i+1) << ": ";
+        getline(cin, line);
+        istringstream iss(line);
+        
+        for (int j = 0; j < 3; j++) {
+            if (!(iss >> board[i][j])) {
+                board[i][j] = -1; // Mark invalid input
+            }
+        }
+    }
+    return board;
+}
+
+int main() {
+    // Goal state
+    vector<vector<int>> goal = {
+        {1, 2, 3},
+        {4, 5, 6},
+        {7, 8, 0}
+    };
+
+    // Get initial board from user
+    vector<vector<int>> start = getInputBoard();
+    
+    // Validate the board
+    if (!validateBoard(start)) {
+        cerr << "Error: Invalid board configuration!\n";
+        return 1;
+    }
+
+    cout << "\nInitial Board:\n";
+    printBoard(start);
+
+    // Solve the puzzle
+    vector<string> solution = solvePuzzle(start, goal);
+
+    if (solution.empty()) {
+        cout << "\nNo solution exists for this configuration!\n";
+    } else {
+        cout << "\nSolution found in " << solution.size() << " moves:\n";
+        for (size_t i = 0; i < solution.size(); i++) {
+            cout << (i+1) << ". " << solution[i] << "\n";
+        }
+        cout << "\nGoal Board:\n";
+        printBoard(goal);
+    }
+
+    return 0;
+}
